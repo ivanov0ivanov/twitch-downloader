@@ -1,6 +1,6 @@
 {
   "name": "twitch-downloader",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Interactive CLI for downloading Twitch VODs, clips and live streams via yt-dlp",
   "type": "module",
   "main": "src/index.js",

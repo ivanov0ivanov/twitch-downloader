@@ -23,3 +23,5 @@ if (!deps.ytDlp.found) log.info('yt-dlp is missing — pick "Install missing too
 if (!deps.ffmpeg.found) log.info('ffmpeg is missing — pick "Install missing tools" in the menu');
 
 await runApp(deps);
+// A piped/raw stdin can keep the event loop alive after the menu closes.
+process.exit(0);

@@ -59,7 +59,7 @@ const PATTERNS = [
  * @param {string} stderrText raw (possibly multi-line) error output
  * @returns {{message: string, hint?: string, code?: string, raw?: string}}
  */
-export function explainFailure(stderrText) {
+function explainFailure(stderrText) {
   const text = (stderrText || '').trim();
   for (const p of PATTERNS) {
     if (p.re.test(text)) return { message: p.message, hint: p.hint, code: p.code };

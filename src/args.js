@@ -7,10 +7,10 @@
 export const BEST_FORMAT = 'bv*+ba/b';
 
 /** Output name template (without extension — the native extension is appended literally). */
-export const FILENAME_TEMPLATE = '%(uploader)s - %(title)s - %(id)s';
+const FILENAME_TEMPLATE = '%(uploader)s - %(title)s - %(id)s';
 
 /** Keep final paths comfortably under the Windows path limit. */
-export const TRIM_FILENAME_LENGTH = 120;
+const TRIM_FILENAME_LENGTH = 120;
 
 /**
  * Native container for stage 1.

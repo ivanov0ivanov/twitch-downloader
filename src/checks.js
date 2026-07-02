@@ -89,7 +89,7 @@ async function refreshProcessPath() {
 }
 
 /** @returns {Promise<{found: boolean, version: string|null}>} */
-export async function checkYtDlp() {
+async function checkYtDlp() {
   const res = await runCommand('yt-dlp', ['--version'], { timeoutMs: 15000 });
   if (res.code !== 0) return { found: false, version: null };
   return { found: true, version: res.stdout.trim().split(/\r?\n/)[0] || 'unknown' };

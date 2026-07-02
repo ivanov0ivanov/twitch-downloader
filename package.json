@@ -1,0 +1,26 @@
+{
+  "name": "twitch-downloader",
+  "version": "0.1.0",
+  "description": "Interactive CLI for downloading Twitch VODs, clips and live streams via yt-dlp",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "twitch",
+    "yt-dlp",
+    "downloader",
+    "cli",
+    "vod"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@clack/prompts": "^1.6.0",
+    "picocolors": "^1.1.1"
+  }
+}

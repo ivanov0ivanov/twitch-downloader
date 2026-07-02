@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Downloaded media (this is a pure-JS project, so *.ts here means MPEG-TS video)
+downloads/
+*.mp4
+*.mkv
+*.ts
+*.part
+
+# Logs
+npm-debug.log*
+
+# Agent working memory (local only)
+agent-data/

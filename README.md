@@ -88,6 +88,8 @@ twitch-downloader/
 │   ├── logger.js      # unified … ✓ ✖ ⚠ ℹ status lines
 │   └── banner.js
 ├── tests/             # node:test suites (url, formats, args, stats)
+├── docs/              # DOCS-MAP.md (change impact), SYSTEM-MAP.md (architecture)
+├── .claude/           # project rules and agent config
 ├── downloads/         # created at runtime, gitignored
 ├── README.md
 └── ROADMAP.md         # MVP 2 plan (not implemented yet)

@@ -13,3 +13,7 @@ npm-debug.log*
 
 # Agent working memory (local only)
 agent-data/
+
+# Personal local config
+CLAUDE.local.md
+.claude/settings.local.json

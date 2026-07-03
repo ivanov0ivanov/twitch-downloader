@@ -228,6 +228,38 @@ function runStage({ cmd, args, stageName, progressPrefix, confirmStop, elapsedFr
     child.stdout.on('data', (d) => handleChunk('out', d));
     child.stderr.on('data', (d) => handleChunk('err', d));
 
+    // Trap Ctrl+C as a raw byte while the stage runs: in raw mode the console
+    // generates no CTRL_C_EVENT at all, so wrapper processes (npm, cmd, the
+    // shell) survive the keypress — with a console signal they die and steal
+    // the terminal mid-confirm (observed with `npm start`). SIGINT stays as
+    // the non-TTY fallback.
+    let keyTrapActive = false;
+    const onKey = (buf) => {
+      if (buf.includes(3)) interrupt(); // ETX — Ctrl+C in raw mode
+    };
+    const attachKeyTrap = () => {
+      if (keyTrapActive || !process.stdin.isTTY) return;
+      try {
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        process.stdin.on('data', onKey);
+        keyTrapActive = true;
+      } catch {
+        /* non-interactive stdin */
+      }
+    };
+    const detachKeyTrap = () => {
+      if (!keyTrapActive) return;
+      keyTrapActive = false;
+      process.stdin.off('data', onKey);
+      try {
+        process.stdin.setRawMode(false);
+      } catch {
+        /* best effort */
+      }
+      process.stdin.pause();
+    };
+
     const interrupt = () => {
       if (confirmOpen || exited) return;
       if (stopRequested) {
@@ -235,6 +267,7 @@ function runStage({ cmd, args, stageName, progressPrefix, confirmStop, elapsedFr
         return;
       }
       confirmOpen = true;
+      detachKeyTrap(); // hand the terminal to the confirm prompt
       renderer.pause();
       pendingInterrupt = (async () => {
         // The child keeps downloading while we ask — it never saw the Ctrl+C.
@@ -253,13 +286,18 @@ function runStage({ cmd, args, stageName, progressPrefix, confirmStop, elapsedFr
         } else {
           log.info('Continuing');
           renderer.resume();
+          attachKeyTrap(); // keep catching Ctrl+C for the next interrupt
         }
       })().catch(() => {
         confirmOpen = false;
-        if (!exited && !stopRequested) renderer.resume();
+        if (!exited && !stopRequested) {
+          renderer.resume();
+          attachKeyTrap();
+        }
       });
     };
     activeStage = { child, interrupt };
+    attachKeyTrap();
 
     const finalize = async (code, missing) => {
       // A failed spawn fires BOTH 'error' and 'close' (verified on win32) —
@@ -272,6 +310,7 @@ function runStage({ cmd, args, stageName, progressPrefix, confirmStop, elapsedFr
       for (const key of ['out', 'err']) {
         if (remainders[key]) handleLine(remainders[key]);
       }
+      detachKeyTrap();
       renderer.finish();
       logSink.close();
       restoreTerminal();

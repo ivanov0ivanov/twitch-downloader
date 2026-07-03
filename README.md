@@ -47,7 +47,7 @@ The intermediate native file is **kept by default**; right after the format sele
 
 While a stage runs, the UI shows a single compact progress line ending with elapsed time (percent · size · speed · ETA for VODs; time · size · bitrate for live). Raw yt-dlp/ffmpeg output goes to `logs/debug.log`; stream warnings (timestamp discontinuities etc.) are collapsed into one short line plus a counter.
 
-**Ctrl+C during a download or recording** opens a confirmation prompt — the transfer keeps running while you decide. *No* continues as if nothing happened; *Yes* stops cleanly: a VOD keeps a resumable `.part`, a live recording keeps the playable `.ts` recorded so far. Quality/format/keep choices are remembered as defaults for the rest of the session.
+**Ctrl+C during a download or recording** opens a confirmation prompt — the transfer keeps running while you decide. *No* continues as if nothing happened; *Yes* stops cleanly: a VOD keeps a resumable `.part`, a live recording keeps the playable `.ts` recorded so far. Quality/format/keep choices are remembered as defaults for the rest of the session. This works the same regardless of how the app was started (`npm start` included): during a stage Ctrl+C is read as a keystroke, so no console-wide signal is fired and wrapper processes stay alive.
 
 Output naming: `uploader - title - id.ext` in `./downloads/`, sanitized for Windows (`--windows-filenames`, trimmed to stay under the path limit).
 

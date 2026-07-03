@@ -37,6 +37,10 @@ reintroduces a silent, hard-to-debug bug.
   (CTRL_C_EVENT) kills the child before the user can confirm, and a dying python/ffmpeg corrupts
   the console input mode (dead arrow keys in the menu). Detached children never see Ctrl+C and
   never touch the console — the confirm-stop flow depends on this.
+- While a stage runs, stdin MUST be in raw mode with Ctrl+C read as the `\x03` byte (key trap in
+  `runStage`): a cooked-mode Ctrl+C raises CTRL_C_EVENT for the whole console group and kills the
+  `npm start` wrapper (cmd/npm) — the shell then steals the terminal mid-confirm while the CLI and
+  the recording keep running orphaned. SIGINT stays only as the non-TTY fallback.
 - Because stage children are detached, the CLI must reap them on its own death — see the
   synchronous `taskkill` in the `process.on('exit')` hook in `src/index.js`. `runCommand`
   children (hidden consoles) are reaped there too. SIGHUP/SIGBREAK handlers MUST exist:

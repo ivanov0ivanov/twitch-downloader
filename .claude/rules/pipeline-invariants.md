@@ -43,6 +43,6 @@ reintroduces a silent, hard-to-debug bug.
   without them, closing the terminal window (CTRL_CLOSE_EVENT) kills node WITHOUT emitting
   `exit`, and the invisible detached tree records for hours.
 - After a confirmed stop, file handles outlive taskkill by a beat: await `killTree()` and retry
-  deletions on EBUSY (see `clearForFresh`).
+  deletions on EBUSY (see `rmWithRetry` in `src/downloader.js`).
 - After winget installs, re-read the registry PATH (`refreshProcessPath`) before spawning tools —
   winget portable packages append to the registry PATH, which a running process never sees.

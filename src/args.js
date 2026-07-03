@@ -26,6 +26,14 @@ export function escapeOutputTemplate(path) {
 }
 
 /**
+ * yt-dlp on Windows writes pipes in the ANSI code page (PyInstaller builds
+ * ignore PYTHONUTF8), which garbles Cyrillic titles/filenames on the Node
+ * side. `--encoding utf-8` forces a clean UTF-8 channel — every invocation
+ * whose output is parsed (titles, filenames, format lists) must carry it.
+ */
+const UTF8_ARGS = ['--encoding', 'utf-8'];
+
+/**
  * Args for the metadata probe: validates the URL against Twitch, prints
  * uploader / title / id / is_live and the exact output filename yt-dlp
  * would produce for our template (already sanitized for Windows).
@@ -33,6 +41,7 @@ export function escapeOutputTemplate(path) {
 export function buildMetaArgs({ url, downloadsDir, nativeExt }) {
   const template = `${escapeOutputTemplate(downloadsDir)}\\${FILENAME_TEMPLATE}.${nativeExt}`;
   return [
+    ...UTF8_ARGS,
     '--no-warnings',
     '--windows-filenames',
     '--trim-filenames', String(TRIM_FILENAME_LENGTH),
@@ -48,7 +57,7 @@ export function buildMetaArgs({ url, downloadsDir, nativeExt }) {
 
 /** Args for listing available formats (yt-dlp -F). */
 export function buildFormatListArgs(url) {
-  return ['-F', '--no-warnings', url];
+  return [...UTF8_ARGS, '-F', '--no-warnings', url];
 }
 
 /**
@@ -58,6 +67,7 @@ export function buildFormatListArgs(url) {
  */
 export function buildStage1Args({ url, formatId, outputPath, isLive }) {
   const args = [
+    ...UTF8_ARGS,
     '--no-warnings',
     '--progress',
     '-f', formatId || BEST_FORMAT,
@@ -69,6 +79,9 @@ export function buildStage1Args({ url, formatId, outputPath, isLive }) {
   if (isLive) {
     // Write straight to the final name: a killed recording must stay playable.
     args.push('--no-part');
+    // Quiet the ffmpeg HLS downloader at the source: drop info chatter
+    // (Opening <url> …) but keep the stats progress line and real warnings.
+    args.push('--downloader-args', 'ffmpeg:-loglevel warning -stats');
   } else {
     // Parallel fragments speed up long VODs; .part files enable resume.
     args.push('-N', '4', '--continue');

@@ -20,7 +20,9 @@ Two-stage pipeline: stage 1 downloads the **native** stream (`.ts` for VOD/live,
 - `src/args.js` — **pure** yt-dlp/ffmpeg argument builders (unit-tested; change args only here)
 - `src/formats.js` — `yt-dlp -F` fetch + parser; `src/url.js` — URL classification
 - `src/checks.js` — tool detection/install, `runCommand`, `killTree`
-- Tests: `tests/` (url / formats / args / stats suites)
+- `src/progress.js` — pure output-line classification + compact progress renderer
+- `src/debuglog.js` — raw child output sink (`logs/debug.log`, gitignored)
+- Tests: `tests/` (url / formats / args / stats / progress suites)
 - Documentation: `docs/` (DOCS-MAP, SYSTEM-MAP), `README.md`, `ROADMAP.md`
 - Runtime output: `downloads/` (gitignored)
 - Agent memory: `agent-data/` (gitignored, read at session start)
@@ -47,7 +49,7 @@ Two-stage pipeline: stage 1 downloads the **native** stream (`.ts` for VOD/live,
 - Test framework: node:test (built-in)
 - Test command: `npm test`
 - Test directory: `tests/`
-- Test types used: unit (pure logic only: URL classification, -F parsing, arg building, stats)
+- Test types used: unit (pure logic only: URL classification, -F parsing, arg building, stats, progress classification/rendering)
 - Naming: `*.test.js`
 
 ## Forbidden zones

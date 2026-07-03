@@ -45,6 +45,10 @@ After every successful download the summary is printed and Explorer opens with t
 
 The intermediate native file is **kept by default**; right after the format selection the app asks whether to keep it. If you choose *No*, it is deleted only after a **successful** remux. If the remux fails, the native file always remains as a working result.
 
+While a stage runs, the UI shows a single compact progress line ending with elapsed time (percent · size · speed · ETA for VODs; time · size · bitrate for live). Raw yt-dlp/ffmpeg output goes to `logs/debug.log`; stream warnings (timestamp discontinuities etc.) are collapsed into one short line plus a counter.
+
+**Ctrl+C during a download or recording** opens a confirmation prompt — the transfer keeps running while you decide. *No* continues as if nothing happened; *Yes* stops cleanly: a VOD keeps a resumable `.part`, a live recording keeps the playable `.ts` recorded so far. Quality/format/keep choices are remembered as defaults for the rest of the session.
+
 Output naming: `uploader - title - id.ext` in `./downloads/`, sanitized for Windows (`--windows-filenames`, trimmed to stay under the path limit).
 
 ## Twitch VOD retention limits
@@ -64,11 +68,13 @@ Past broadcasts are removed by Twitch automatically: after **7 days** for most a
 | `Network problem while talking to Twitch` | Connection drop mid-download | Re-run the same URL — the `.part` file resumes |
 | `Low disk space` warning | Free space < ~2.2× the estimated size | The two-stage build briefly needs native + target side by side |
 | File already exists prompt | Same VOD downloaded before (any quality — the name doesn't include quality) | Choose Resume / Overwrite / Skip — nothing is overwritten silently |
+| `Stop the download?` prompt | You pressed Ctrl+C during a stage | *Yes* stops and keeps the partial/recorded file; *No* continues — the download never paused |
+| Garbled video titles | yt-dlp wrote pipes in the ANSI code page (fixed) | Update to the latest version — the CLI now forces `--encoding utf-8` on every parsed yt-dlp call |
 
 ## Development
 
 ```powershell
-npm test   # node:test suite: URL classification, -F parsing, argument building, stats
+npm test   # node:test suite: URL classification, -F parsing, argument building, stats, progress-line classification
 ```
 
 Project layout:
@@ -83,11 +89,14 @@ twitch-downloader/
 │   ├── args.js        # pure yt-dlp/ffmpeg argument builders
 │   ├── url.js         # Twitch URL classification
 │   ├── checks.js      # yt-dlp/ffmpeg detection and winget/pip install
+│   ├── progress.js    # output-line classification + compact progress renderer
+│   ├── debuglog.js    # raw child output → logs/debug.log
 │   ├── stats.js       # downloads/ statistics
 │   ├── errors.js      # yt-dlp stderr → plain-language messages
 │   ├── logger.js      # unified … ✓ ✖ ⚠ ℹ status lines
 │   └── banner.js
-├── tests/             # node:test suites (url, formats, args, stats)
+├── tests/             # node:test suites (url, formats, args, stats, progress)
+├── logs/              # technical debug log, gitignored
 ├── docs/              # DOCS-MAP.md (change impact), SYSTEM-MAP.md (architecture)
 ├── .claude/           # project rules and agent config
 ├── downloads/         # created at runtime, gitignored

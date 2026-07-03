@@ -70,7 +70,11 @@ function explainFailure(stderrText) {
     message: 'The operation failed.',
     hint: undefined,
     code: undefined,
-    raw: lastErrorLine.replace(/^ERROR:\s*/i, '').slice(0, 300),
+    // Long signed URLs must never reach the UI — keep them in the debug log only.
+    raw: lastErrorLine
+      .replace(/^ERROR:\s*/i, '')
+      .replace(/https?:\/\/\S+/g, '<url>')
+      .slice(0, 300),
   };
 }
 

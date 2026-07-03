@@ -20,10 +20,25 @@ async function pathExists(p_) {
   }
 }
 
+/**
+ * Session-scoped defaults: the last confirmed selections become the
+ * pre-selected answers next time (survives interrupted downloads).
+ * Persistent config is an MVP 2 item (see ROADMAP).
+ */
+const sessionDefaults = { formatId: undefined, chosenExt: undefined, keepNative: undefined };
+
+/** Ctrl+C confirm for a running stage; treats a second Ctrl+C (cancel) as "stop". */
+function makeConfirmStop(message) {
+  return async () => {
+    const answer = await p.confirm({ message, initialValue: false });
+    return p.isCancel(answer) ? true : answer;
+  };
+}
+
 /** true when the user pressed Ctrl+C / Esc inside a prompt. */
 function cancelled(value) {
   if (p.isCancel(value)) {
-    log.info('Cancelled — back to menu');
+    log.info('Cancelled');
     return true;
   }
   return false;
@@ -141,8 +156,14 @@ async function runSelectionsAndDownload({ deps, urlInfo, meta, isLive }) {
   if (formats.length === 0) {
     log.info('Proceeding with "Best (auto)"');
   } else {
-    const choice = await p.select({ message: 'Quality', options: buildQualityOptions(formats) });
+    const qualityOptions = buildQualityOptions(formats);
+    const rememberedQuality =
+      sessionDefaults.formatId !== undefined && qualityOptions.some((o) => o.value === sessionDefaults.formatId)
+        ? sessionDefaults.formatId
+        : undefined;
+    const choice = await p.select({ message: 'Quality', options: qualityOptions, initialValue: rememberedQuality });
     if (cancelled(choice)) return;
+    sessionDefaults.formatId = choice;
     formatId = choice;
     const sizes = formats.map((f) => f.sizeBytes).filter(Boolean);
     estimateBytes = formatId
@@ -156,22 +177,32 @@ async function runSelectionsAndDownload({ deps, urlInfo, meta, isLive }) {
   if (nativeExt === 'ts' && !deps.ffmpeg.found) {
     await offerFfmpegInstall(deps, 'mp4/mkv rebuild is unavailable without it');
   }
+  const formatOptions = containerOptions(nativeExt, deps.ffmpeg.found);
+  const rememberedExt = formatOptions.some((o) => o.value === sessionDefaults.chosenExt)
+    ? sessionDefaults.chosenExt
+    : isLive
+      ? 'ts'
+      : deps.ffmpeg.found || nativeExt === 'mp4'
+        ? 'mp4'
+        : 'ts';
   const chosenExt = await p.select({
     message: 'Final format',
-    options: containerOptions(nativeExt, deps.ffmpeg.found),
-    initialValue: isLive ? 'ts' : deps.ffmpeg.found || nativeExt === 'mp4' ? 'mp4' : 'ts',
+    options: formatOptions,
+    initialValue: rememberedExt,
   });
   if (cancelled(chosenExt)) return;
+  sessionDefaults.chosenExt = chosenExt;
 
   // Keep the intermediate native file? (only relevant when a remux will happen)
   let keepNative = true;
   if (chosenExt !== nativeExt) {
     const answer = await p.confirm({
       message: `Keep the intermediate native .${nativeExt} after remux?`,
-      initialValue: true,
+      initialValue: sessionDefaults.keepNative ?? true,
     });
     if (cancelled(answer)) return;
     keepNative = answer;
+    sessionDefaults.keepNative = answer;
   }
 
   // Existing file conflict
@@ -210,6 +241,11 @@ async function executeDownload({ deps, url, meta, formatId, chosenExt, keepNativ
       nativePath: meta.nativePath,
       isLive,
       label: `${verb} (${stagePrefix}native .${nativeExt})`,
+      confirmStop: makeConfirmStop(
+        isLive
+          ? 'Stop the recording? Everything recorded so far will be kept.'
+          : 'Stop the download? The partial file can be resumed later.',
+      ),
     });
     if (s1.status === 'error' && s1.error?.code === 'format') {
       log.fail(s1.error.message);
@@ -224,6 +260,7 @@ async function executeDownload({ deps, url, meta, formatId, chosenExt, keepNativ
         : [{ value: null, label: 'Best (auto)', hint: 'highest available video+audio' }];
       const again = await p.select({ message: 'Pick an available quality', options });
       if (cancelled(again)) return;
+      sessionDefaults.formatId = again;
       currentFormat = again;
       continue;
     }
@@ -231,21 +268,43 @@ async function executeDownload({ deps, url, meta, formatId, chosenExt, keepNativ
   }
 
   if (s1.status === 'interrupted') {
-    log.warn(`Interrupted — ${formatSize(s1.partBytes || 0)} downloaded so far`);
-    log.info('Partial file kept in downloads/ — run the same URL again and choose Resume to continue');
+    if (isLive) {
+      // Live lands here only when nothing usable hit the disk (a stopped
+      // recording with data returns status ok) — recordings don't resume.
+      log.warn(`Recording stopped after ${formatDuration(s1.elapsedMs || 0)} — nothing was captured`);
+      log.info('The stream may have only just started; try recording again');
+    } else {
+      log.warn(`Stopped: ${formatSize(s1.partBytes || 0)} downloaded in ${formatDuration(s1.elapsedMs || 0)}`);
+      log.info('Partial file kept in downloads/ — run the same URL again and choose Resume to continue');
+    }
     return;
   }
   if (s1.status === 'error') {
     log.fail(s1.error.message);
     if (s1.error.hint) log.info(s1.error.hint);
+    if ((s1.elapsedMs || 0) > 3000) {
+      log.info(`Elapsed before the failure: ${formatDuration(s1.elapsedMs)}`);
+    }
     return;
   }
 
   let finalPath = meta.nativePath;
   let finalBytes = s1.fileBytes;
 
+  // If the download completed while the user was confirming a stop, don't
+  // barrel into a multi-minute remux they just tried to abort — ask first.
+  let doStage2 = plan.needsRemux;
+  if (doStage2 && s1.stopAfterFinish) {
+    log.info('The download finished while you were deciding to stop');
+    const proceed = await p.confirm({ message: `Build the ${plan.targetExt} as planned?`, initialValue: true });
+    if (cancelled(proceed) || !proceed) {
+      log.info(`Native .${nativeExt} kept as the result`);
+      doStage2 = false;
+    }
+  }
+
   // Stage 2 — remux (skipped when the user chose the native container)
-  if (plan.needsRemux) {
+  if (doStage2) {
     const targetPath = targetPathFor(meta.nativePath, plan.targetExt);
     // Tools can vanish between start and now — re-check (spec requirement).
     const ff = await checkFfmpeg();
@@ -263,7 +322,12 @@ async function executeDownload({ deps, url, meta, formatId, chosenExt, keepNativ
       }
     }
     while (doRemux) {
-      const s2 = await dl.runStage2({ nativePath: meta.nativePath, targetPath, targetExt: plan.targetExt });
+      const s2 = await dl.runStage2({
+        nativePath: meta.nativePath,
+        targetPath,
+        targetExt: plan.targetExt,
+        confirmStop: makeConfirmStop('Stop the remux? The native file stays intact.'),
+      });
       if (s2.status === 'ok') {
         log.ok(`Saved: ${path.basename(targetPath)} (${formatSize(s2.fileBytes)})`);
         finalPath = targetPath;
@@ -276,19 +340,22 @@ async function executeDownload({ deps, url, meta, formatId, chosenExt, keepNativ
         log.warn('Remux interrupted — unfinished output removed, native file kept as the result');
         break;
       }
-      log.fail(`Remux failed — native .${nativeExt} kept as the result`);
+      log.fail('Remux failed');
       if (s2.error) {
         log.detail(s2.error.message);
         if (s2.error.hint) log.info(s2.error.hint);
       }
       const retry = await p.select({
-        message: 'Remux failed — what next?',
+        message: 'What next?',
         options: [
           { value: 'retry', label: 'Retry the remux' },
           { value: 'keep', label: 'Finish with the native file' },
         ],
       });
-      if (cancelled(retry) || retry === 'keep') break;
+      if (cancelled(retry) || retry === 'keep') {
+        log.info(`Native .${nativeExt} kept as the result`);
+        break;
+      }
     }
   }
 

@@ -6,13 +6,29 @@ import { log } from './logger.js';
  * Kill a child and its whole process tree. yt-dlp.exe is a PyInstaller
  * onefile launcher whose real worker is a child process — plain kill()
  * terminates only the launcher and the download keeps running.
+ * Resolves when taskkill has finished, i.e. the whole tree got the kill
+ * (file handles may need another beat to be released by the OS).
  */
 export function killTree(child) {
-  if (process.platform === 'win32' && child.pid) {
-    execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], () => {});
-  } else {
-    child.kill('SIGKILL');
-  }
+  return new Promise((resolve) => {
+    if (process.platform === 'win32' && child.pid) {
+      execFile('taskkill', ['/PID', String(child.pid), '/T', '/F'], () => resolve());
+    } else {
+      child.kill('SIGKILL');
+      resolve();
+    }
+  });
+}
+
+/**
+ * Children spawned by runCommand run in hidden consoles (windowsHide), so a
+ * console Ctrl+C never reaches them — index.js reaps these PIDs on exit.
+ */
+const activeCommands = new Set();
+
+/** PIDs of in-flight runCommand children, for the synchronous exit reaper. */
+export function getActiveCommandPids() {
+  return [...activeCommands].map((c) => c.pid).filter(Boolean);
 }
 
 /**
@@ -31,6 +47,7 @@ export function runCommand(cmd, args, { onStdout, onStderr, timeoutMs } = {}) {
       resolve({ code: -1, stdout: '', stderr: String(err), missing: true });
       return;
     }
+    activeCommands.add(child);
     if (timeoutMs) {
       timer = setTimeout(() => killTree(child), timeoutMs);
     }
@@ -44,10 +61,12 @@ export function runCommand(cmd, args, { onStdout, onStderr, timeoutMs } = {}) {
     });
     child.on('error', (err) => {
       clearTimeout(timer);
+      activeCommands.delete(child);
       resolve({ code: -1, stdout, stderr: String(err), missing: err.code === 'ENOENT' });
     });
     child.on('close', (code) => {
       clearTimeout(timer);
+      activeCommands.delete(child);
       resolve({ code: code ?? -1, stdout, stderr, missing: false });
     });
   });

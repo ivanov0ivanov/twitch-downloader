@@ -24,6 +24,17 @@ test('percent signs are escaped for -o templates', () => {
   assert.equal(escapeOutputTemplate('D:\\100% legit\\file.ts'), 'D:\\100%% legit\\file.ts');
 });
 
+test('every yt-dlp builder forces UTF-8 output (Cyrillic titles)', () => {
+  for (const args of [
+    buildMetaArgs({ url: URL, downloadsDir: 'D:\\dl', nativeExt: 'ts' }),
+    buildFormatListArgs(URL),
+    buildStage1Args({ url: URL, formatId: null, outputPath: 'D:\\dl\\x.ts', isLive: false }),
+    buildStage1Args({ url: URL, formatId: null, outputPath: 'D:\\dl\\x.ts', isLive: true }),
+  ]) {
+    assert.equal(args[args.indexOf('--encoding') + 1], 'utf-8');
+  }
+});
+
 test('meta args print the fields and the computed filename', () => {
   const args = buildMetaArgs({ url: URL, downloadsDir: 'D:\\dl', nativeExt: 'ts' });
   assert.ok(args.includes('--windows-filenames'));
@@ -35,7 +46,7 @@ test('meta args print the fields and the computed filename', () => {
 });
 
 test('format list args use -F', () => {
-  assert.deepEqual(buildFormatListArgs(URL), ['-F', '--no-warnings', URL]);
+  assert.deepEqual(buildFormatListArgs(URL), ['--encoding', 'utf-8', '-F', '--no-warnings', URL]);
 });
 
 test('stage 1 VOD args: native download, no fixup, resume-friendly', () => {
@@ -55,11 +66,12 @@ test('stage 1 uses Best (auto) selector when no format id chosen', () => {
   assert.equal(args[args.indexOf('-f') + 1], BEST_FORMAT);
 });
 
-test('stage 1 live args write directly to the final file', () => {
+test('stage 1 live args write directly to the final file and quiet ffmpeg chatter', () => {
   const args = buildStage1Args({ url: URL, formatId: null, outputPath: 'D:\\dl\\x.ts', isLive: true });
   assert.ok(args.includes('--no-part'));
   assert.ok(!args.includes('-N'));
   assert.ok(!args.includes('--continue'));
+  assert.equal(args[args.indexOf('--downloader-args') + 1], 'ffmpeg:-loglevel warning -stats');
 });
 
 test('stage 1 escapes % in the output path', () => {

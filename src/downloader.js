@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { runCommand, killTree } from './checks.js';
 import { buildMetaArgs, buildStage1Args, buildRemuxArgs } from './args.js';
@@ -228,21 +229,25 @@ function runStage({ cmd, args, stageName, progressPrefix, confirmStop, elapsedFr
     child.stdout.on('data', (d) => handleChunk('out', d));
     child.stderr.on('data', (d) => handleChunk('err', d));
 
-    // Trap Ctrl+C as a raw byte while the stage runs: in raw mode the console
+    // Trap Ctrl+C as a keystroke while the stage runs: in raw mode the console
     // generates no CTRL_C_EVENT at all, so wrapper processes (npm, cmd, the
     // shell) survive the keypress — with a console signal they die and steal
     // the terminal mid-confirm (observed with `npm start`). SIGINT stays as
     // the non-TTY fallback.
+    // Uses the same node:readline keypress machinery as @clack prompts (shared
+    // decoder on stdin) and never calls pause(): extra pause/resume cycles on
+    // the Windows console are what left the TTY deaf after a stage.
     let keyTrapActive = false;
-    const onKey = (buf) => {
-      if (buf.includes(3)) interrupt(); // ETX — Ctrl+C in raw mode
+    const onKeypress = (str, key) => {
+      if (str === '\u0003' || (key?.ctrl && key.name === 'c')) interrupt();
     };
     const attachKeyTrap = () => {
       if (keyTrapActive || !process.stdin.isTTY) return;
       try {
+        readline.emitKeypressEvents(process.stdin);
         process.stdin.setRawMode(true);
+        process.stdin.on('keypress', onKeypress);
         process.stdin.resume();
-        process.stdin.on('data', onKey);
         keyTrapActive = true;
       } catch {
         /* non-interactive stdin */
@@ -251,13 +256,13 @@ function runStage({ cmd, args, stageName, progressPrefix, confirmStop, elapsedFr
     const detachKeyTrap = () => {
       if (!keyTrapActive) return;
       keyTrapActive = false;
-      process.stdin.off('data', onKey);
+      process.stdin.off('keypress', onKeypress);
       try {
         process.stdin.setRawMode(false);
       } catch {
         /* best effort */
       }
-      process.stdin.pause();
+      // No pause() here: the next prompt (or the exit path) owns the stream.
     };
 
     const interrupt = () => {

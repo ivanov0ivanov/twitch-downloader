@@ -58,9 +58,9 @@ flowchart TB
 | `url.js` | Twitch URL classification (vod/clip/channel/…) | — |
 | `errors.js` | yt-dlp stderr → plain-language AppError (message/hint/code) | — |
 | `checks.js` | Tool detection, winget/pip install, registry PATH refresh, killTree | child_process |
-| `progress.js` | Pure stream-line classification (progress/warning/noise) + compact single-line renderer | — |
+| `progress.js` | Pure stream-line classification (progress/duration/warning/noise), progress-text composition (percent/ETA/REC) + compact single-line renderer | — |
 | `debuglog.js` | Raw child output → `logs/debug.log` (technical log, keeps the UI clean) | node:fs |
-| `logger.js` / `stats.js` / `banner.js` | Unified `… ✓ ✖ ⚠ ℹ` output; downloads/ statistics; ASCII banner | picocolors |
+| `logger.js` / `stats.js` / `banner.js` | Unified `… ✓ ✖ ▲ ●` output (non-emoji glyphs only); downloads/ statistics; ASCII banner | picocolors |
 
 ## Integration Points
 

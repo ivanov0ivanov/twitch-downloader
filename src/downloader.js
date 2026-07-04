@@ -3,12 +3,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import pc from 'picocolors';
 import { runCommand, killTree } from './checks.js';
 import { buildMetaArgs, buildStage1Args, buildRemuxArgs } from './args.js';
 import { appErrorFrom, AppError } from './errors.js';
 import { log } from './logger.js';
 import { formatSize, formatDuration } from './stats.js';
-import { classifyLine, createProgressRenderer } from './progress.js';
+import { classifyLine, createProgressRenderer, formatFfmpegProgress } from './progress.js';
 import { openStageLog, DEBUG_LOG_PATH } from './debuglog.js';
 
 /** MVP 1 downloads into a fixed folder next to the package (see ROADMAP for MVP 2). */
@@ -163,7 +164,7 @@ export function requestInterrupt() {
  *
  * @returns {Promise<{code:number, stderrTail:string, stopRequested:boolean, warnings:number, missing:boolean}>}
  */
-function runStage({ cmd, args, stageName, progressPrefix, confirmStop, elapsedFrom }) {
+function runStage({ cmd, args, stageName, progressPrefix, progressMode, totalBytesEstimate, confirmStop, elapsedFrom }) {
   return new Promise((resolve) => {
     const logSink = openStageLog(stageName);
     let child;
@@ -191,12 +192,24 @@ function runStage({ cmd, args, stageName, progressPrefix, confirmStop, elapsedFr
     let exited = false;
     let finalized = false;
     let pendingInterrupt = null;
+    let inputDurationSec = null; // from the ffmpeg stderr header, powers remux percent/ETA
     const remainders = { out: '', err: '' };
 
     const handleLine = (line) => {
       const c = classifyLine(line);
-      if (c.kind === 'progress') {
-        renderer.update(`${c.text} · ${formatDuration(Date.now() - started)}`);
+      if (c.kind === 'duration') {
+        inputDurationSec = c.seconds;
+      } else if (c.kind === 'progress') {
+        const elapsedMs = Date.now() - started;
+        const text = c.ffmpeg
+          ? formatFfmpegProgress(c.ffmpeg, {
+              mode: progressMode,
+              durationSec: inputDurationSec,
+              totalBytes: totalBytesEstimate,
+              elapsedMs,
+            })
+          : `${c.text} · ${formatDuration(elapsedMs)}`;
+        renderer.update(text);
       } else if (c.kind === 'info') {
         // No UI writes while the confirm prompt is open or a stop is underway
         // (the killed child can still flush buffered output for a beat).
@@ -346,7 +359,11 @@ export async function runStage1({ url, formatId, nativePath, isLive, label, conf
     cmd: 'yt-dlp',
     args: buildStage1Args({ url, formatId, outputPath: nativePath, isLive }),
     stageName: `stage 1 · ${label} · ${url}`,
-    progressPrefix: isLive ? '⏺' : '⬇',
+    // Non-emoji glyphs only: emoji-class symbols (⏺ U+23FA etc.) get one
+    // terminal cell but a two-cell Segoe UI Emoji fallback glyph — they
+    // visually collide with the text that follows.
+    progressPrefix: isLive ? pc.red('●') : '⬇',
+    progressMode: isLive ? 'record' : 'download',
     confirmStop: confirmStop ?? (async () => true),
     elapsedFrom: started,
   });
@@ -404,11 +421,16 @@ export async function runStage1({ url, formatId, nativePath, isLive, label, conf
 export async function runStage2({ nativePath, targetPath, targetExt, confirmStop }) {
   log.step(`Remuxing to ${targetExt} (stage 2/2)`);
   const started = Date.now();
+  // Stream copy keeps output ≈ input size, so the native file doubles as the
+  // total estimate — this is what lets the remux line show `% of ~size`.
+  const nativeStat = await statOrNull(nativePath);
   const res = await runStage({
     cmd: 'ffmpeg',
     args: buildRemuxArgs({ inputPath: nativePath, outputPath: targetPath }),
     stageName: `stage 2 · remux to ${targetExt} · ${path.basename(nativePath)}`,
-    progressPrefix: '🔄',
+    progressPrefix: '→',
+    progressMode: 'remux',
+    totalBytesEstimate: nativeStat?.size ?? null,
     confirmStop: confirmStop ?? (async () => true),
     elapsedFrom: started,
   });

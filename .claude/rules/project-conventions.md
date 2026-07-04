@@ -9,7 +9,7 @@
 ## Patterns
 
 - Pure builders (args, URL classification, parsing, stage planning) are separated from orchestration (menu flows) and process I/O (downloader, checks) — keep new logic in the right layer
-- All terminal status output goes through `src/logger.js` (`… ✓ ✖ ⚠ ℹ` convention: `[icon] [short action] [key detail]`, one line per action)
+- All terminal status output goes through `src/logger.js` (`… ✓ ✖ ▲ ●` convention: `[icon] [short action] [key detail]`, one line per action). Icons and progress prefixes must be non-emoji glyphs (the @clack/prompts family): emoji-class codepoints (`⚠` U+26A0, `ℹ` U+2139, `⏺` U+23FA, …) get one terminal cell but render via the two-cell Segoe UI Emoji fallback and visually collide with the following text
 - Interactive prompts are @clack/prompts only; every prompt result must be checked with `isCancel` and return to the menu gracefully
 
 ## Naming conventions

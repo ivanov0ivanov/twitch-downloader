@@ -6,8 +6,11 @@ import pc from 'picocolors';
  *   …  in progress
  *   ✓  done
  *   ✖  failed
- *   ⚠  warning
- *   ℹ  info
+ *   ▲  warning
+ *   ●  info
+ * Icons must stay non-emoji glyphs (same family @clack/prompts uses): emoji-class
+ * codepoints (⚠ U+26A0, ℹ U+2139, …) are given one terminal cell but render via
+ * the two-cell Segoe UI Emoji fallback and collide with the following text.
  */
 export const log = {
   /** An action has started. */
@@ -24,11 +27,11 @@ export const log = {
   },
   /** Something needs attention but is not fatal. */
   warn(text) {
-    console.log(`${pc.yellow('⚠')} ${text}`);
+    console.log(`${pc.yellow('▲')} ${text}`);
   },
   /** Neutral information. */
   info(text) {
-    console.log(`${pc.blue('ℹ')} ${text}`);
+    console.log(`${pc.blue('●')} ${text}`);
   },
   /** Plain indented detail line (used under a status line, e.g. stats rows). */
   detail(text) {

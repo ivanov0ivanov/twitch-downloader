@@ -45,7 +45,7 @@ After every successful download the summary is printed and Explorer opens with t
 
 The intermediate native file is **kept by default**; right after the format selection the app asks whether to keep it. If you choose *No*, it is deleted only after a **successful** remux. If the remux fails, the native file always remains as a working result.
 
-While a stage runs, the UI shows a single compact progress line ending with elapsed time (percent · size · speed · ETA for VODs; time · size · bitrate for live). Raw yt-dlp/ffmpeg output goes to `logs/debug.log`; stream warnings (timestamp discontinuities etc.) are collapsed into one short line plus a counter.
+While a stage runs, the UI shows a single compact progress line with a uniform grammar — progress · speed · [ETA] · elapsed. VOD downloads mirror yt-dlp (`⬇ 22.3% of 8.36GiB · 10.71MiB/s · ETA 11:57 · 56s`; the trailing value is elapsed time). Remuxes get a real percent and ETA, computed from the input duration and ffmpeg's speed multiplier, with the total size estimated from the native file — stream copy preserves size (`→ 50.0% of ~7.90GiB · 105MiB/s · ETA 00:38 · 39s`). A live recording has no knowable total, so the recorded duration is the progress metric (`● REC 00:21:14 · 14.75MiB · 719KiB/s`). Raw yt-dlp/ffmpeg output goes to `logs/debug.log`; stream warnings (timestamp discontinuities etc.) are collapsed into one short line plus a counter.
 
 **Ctrl+C during a download or recording** opens a confirmation prompt — the transfer keeps running while you decide. *No* continues as if nothing happened; *Yes* stops cleanly: a VOD keeps a resumable `.part`, a live recording keeps the playable `.ts` recorded so far. Quality/format/keep choices are remembered as defaults for the rest of the session. This works the same regardless of how the app was started (`npm start` included): during a stage Ctrl+C is read as a keystroke, so no console-wide signal is fired and wrapper processes stay alive.
 
@@ -89,11 +89,11 @@ twitch-downloader/
 │   ├── args.js        # pure yt-dlp/ffmpeg argument builders
 │   ├── url.js         # Twitch URL classification
 │   ├── checks.js      # yt-dlp/ffmpeg detection and winget/pip install
-│   ├── progress.js    # output-line classification + compact progress renderer
+│   ├── progress.js    # output-line classification, progress-text composition + renderer
 │   ├── debuglog.js    # raw child output → logs/debug.log
 │   ├── stats.js       # downloads/ statistics
 │   ├── errors.js      # yt-dlp stderr → plain-language messages
-│   ├── logger.js      # unified … ✓ ✖ ⚠ ℹ status lines
+│   ├── logger.js      # unified … ✓ ✖ ▲ ● status lines
 │   └── banner.js
 ├── tests/             # node:test suites (url, formats, args, stats, progress)
 ├── logs/              # technical debug log, gitignored

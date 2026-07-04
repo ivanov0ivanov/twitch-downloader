@@ -89,6 +89,9 @@ test('remux args are a pure stream copy that drops data streams', () => {
   // genpts must be an input option (before -i) to heal live-recording PTS gaps
   assert.ok(args.indexOf('-fflags') < args.indexOf('-i'));
   assert.equal(args[args.indexOf('-fflags') + 1], '+genpts');
+  // info level is load-bearing: the Duration header feeds the percent/ETA line
+  assert.equal(args[args.indexOf('-loglevel') + 1], 'info');
+  assert.ok(args.includes('-stats'));
   assert.equal(args.at(-1), 'a.mp4');
 });
 

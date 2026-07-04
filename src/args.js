@@ -98,11 +98,14 @@ export function buildStage1Args({ url, formatId, outputPath, isLive }) {
  * that the mov muxer writes into a structurally broken mp4 (missing moov).
  * `-fflags +genpts` heals missing PTS in live recordings (ad-splice
  * discontinuities otherwise fail the mov muxer); no-op on clean input.
+ * `-loglevel info` (not warning) is load-bearing for the UI: the input
+ * `Duration:` header is info-level and feeds the remux percent/ETA; header
+ * chatter is classified as noise and lands in the debug log only.
  */
 export function buildRemuxArgs({ inputPath, outputPath }) {
   return [
     '-hide_banner',
-    '-loglevel', 'warning',
+    '-loglevel', 'info',
     '-stats',
     '-y',
     '-fflags', '+genpts',

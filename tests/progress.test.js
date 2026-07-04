@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseYtdlpProgress, parseFfmpegStats, classifyLine, createProgressRenderer } from '../src/progress.js';
+import {
+  parseYtdlpProgress,
+  parseFfmpegStats,
+  parseFfmpegDuration,
+  classifyLine,
+  formatFfmpegProgress,
+  createProgressRenderer,
+} from '../src/progress.js';
 
 // Real lines captured from stress runs.
 const YT_MID = '[download]  99.1% of ~  84.12MiB at    1.19MiB/s ETA 00:01 (frag 321/324)';
@@ -29,18 +36,81 @@ test('parses ffmpeg stats lines (video and audio-only shapes)', () => {
   const v = parseFfmpegStats(FF_VIDEO);
   assert.equal(v.time, '00:00:30');
   assert.equal(v.size, '2310KiB');
+  assert.equal(v.speedX, 1900, 'scientific-notation speed multipliers must parse');
   const a = parseFfmpegStats(FF_AUDIO);
   assert.equal(a.time, '00:43:56');
   assert.equal(a.bitrate, '163.9kbits/s');
+  assert.equal(a.speedX, 4980);
 });
 
-test('classifyLine: progress lines become compact progress text', () => {
+test('parses the ffmpeg input Duration header; live "N/A" stays unknown', () => {
+  assert.equal(parseFfmpegDuration('  Duration: 01:42:38.57, start: 0.083000, bitrate: 8123 kb/s'), 6158);
+  assert.equal(parseFfmpegDuration('Duration: N/A, start: 0.000000, bitrate: N/A'), null);
+  assert.equal(parseFfmpegDuration('[download] Destination: file.ts'), null);
+});
+
+test('classifyLine: yt-dlp progress becomes compact progress text', () => {
   const yt = classifyLine(YT_MID);
   assert.equal(yt.kind, 'progress');
   assert.ok(yt.text.includes('99.1% of 84.12MiB'));
+});
+
+test('classifyLine: ffmpeg stats become structured progress data', () => {
   const ff = classifyLine(FF_VIDEO);
   assert.equal(ff.kind, 'progress');
-  assert.ok(ff.text.includes('00:00:30'));
+  assert.equal(ff.ffmpeg.sizeBytes, 2310 * 1024);
+  assert.equal(ff.ffmpeg.time, '00:00:30');
+  assert.equal(ff.ffmpeg.timeSec, 30);
+  assert.equal(ff.ffmpeg.speedX, 1900);
+});
+
+test('classifyLine: ffmpeg Duration header classifies as duration, N/A as noise', () => {
+  const d = classifyLine('  Duration: 01:42:38.57, start: 0.083000, bitrate: 8123 kb/s');
+  assert.equal(d.kind, 'duration');
+  assert.equal(d.seconds, 6158);
+  assert.equal(classifyLine('Duration: N/A, start: 0.000000, bitrate: N/A').kind, 'noise');
+});
+
+test('formatFfmpegProgress: record mode shows a REC timer, size and average speed', () => {
+  const line = formatFfmpegProgress(
+    { sizeBytes: 15466496, sizeLabel: '15104KiB', time: '00:21:14', timeSec: 1274, speedX: 1 },
+    { mode: 'record', elapsedMs: 21000 },
+  );
+  // 15466496 B / 21 s = 719KiB/s; recording length replaces wall elapsed (they duplicate)
+  assert.equal(line, 'REC 00:21:14 · 14.75MiB · 719KiB/s');
+});
+
+test('formatFfmpegProgress: record mode omits speed while the average is still noise', () => {
+  const line = formatFfmpegProgress(
+    { sizeBytes: 122880, sizeLabel: '120KiB', time: '00:00:01', timeSec: 1, speedX: 1 },
+    { mode: 'record', elapsedMs: 800 },
+  );
+  assert.equal(line, 'REC 00:00:01 · 120KiB');
+});
+
+test('formatFfmpegProgress: remux with known duration mirrors the yt-dlp line (percent · speed · ETA · elapsed)', () => {
+  const line = formatFfmpegProgress(
+    { sizeBytes: 3221225472, sizeLabel: '3145728KiB', time: '00:51:19', timeSec: 3079, speedX: 80 },
+    { mode: 'remux', durationSec: 6158, totalBytes: 8589934592, elapsedMs: 30000 },
+  );
+  // 3079/6158 = 50.0%; ETA = (6158-3079)/80 ≈ 38 s; speed = 3 GiB / 30 s
+  assert.equal(line, '50.0% of ~8.00GiB · 102.40MiB/s · ETA 00:38 · 30s');
+});
+
+test('formatFfmpegProgress: remux percent works without a size estimate; hour-long ETAs get an hour digit', () => {
+  const line = formatFfmpegProgress(
+    { sizeBytes: null, sizeLabel: '10KiB', time: '00:00:10', timeSec: 10, speedX: 1 },
+    { mode: 'remux', durationSec: 7210, totalBytes: null, elapsedMs: 5000 },
+  );
+  assert.equal(line, '0.1% · ETA 2:00:00 · 5s');
+});
+
+test('formatFfmpegProgress: remux without duration falls back to size · speed · elapsed', () => {
+  const line = formatFfmpegProgress(
+    { sizeBytes: 2147483648, sizeLabel: '2097152KiB', time: '00:10:00', timeSec: 600, speedX: null },
+    { mode: 'remux', durationSec: null, totalBytes: 8589934592, elapsedMs: 10000 },
+  );
+  assert.equal(line, '2.00GiB · 204.80MiB/s · 10s');
 });
 
 test('classifyLine: warnings are short and URL-free', () => {

@@ -10,6 +10,10 @@ reintroduces a silent, hard-to-debug bug.
 - Remux args MUST keep `-fflags +genpts` (input option, before `-i`): live recordings can contain
   packets with missing PTS around ad-splice boundaries; the mov muxer rejects them. No-op on clean input.
 - ffmpeg exit 0 does not guarantee a valid mp4 — verify with ffprobe when debugging.
+- Remux args MUST keep `-loglevel info` (not warning) + `-stats`: the input `Duration:` header is
+  info-level output and is the denominator for the remux percent/ETA line; at `warning` it is never
+  printed and the UI silently degrades to the size-only fallback. Header chatter stays out of the
+  UI — the classifier routes it to logs/debug.log.
 - A failed or interrupted stage 2 must never delete or damage the native file. Delete the
   intermediate only after a successful remux and only when the user chose not to keep it.
 
